@@ -2,14 +2,14 @@
 
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import { Session } from '@supabase/supabase-js'
-import { supabase, Profile, AuthState, User } from './client'
+import { supabase, Profile, AuthState, User, Database } from './client'
 
 interface AuthContextType extends AuthState {
   signIn: (email: string, password: string) => Promise<{ data: any; error: any }>
   signUp: (email: string, password: string, fullName: string) => Promise<{ data: any; error: any }>
   signOut: () => Promise<{ error: any }>
   resetPassword: (email: string) => Promise<{ data: any; error: any }>
-  updateProfile: (updates: Omit<Partial<Profile>, 'id'>) => Promise<{ data: Profile | null; error: any }>
+  updateProfile: (updates: Omit<Partial<Profile>, 'id' | 'created_at'>) => Promise<{ data: Profile | null; error: any }>
   getCurrentProfile: () => Promise<Profile | null>
 }
 
@@ -26,40 +26,66 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!user) return null
 
     try {
+      // Use maybeSingle() to avoid throwing on no results
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', user.id)
-        .single()
+        .maybeSingle()
 
       if (error) {
         console.error('Error fetching profile:', error)
+        setError(error.message)
         return null
+      }
+
+      // Update local state if profile exists
+      if (data) {
+        setProfile(data)
       }
 
       return data
     } catch (err) {
       console.error('Error in getCurrentProfile:', err)
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error'
+      setError(errorMessage)
       return null
     }
   }, [user])
 
   // Update user profile
-  const updateProfile = async (updates: Omit<Partial<Profile>, 'id'>) => {
+  const updateProfile = async (updates: Omit<Partial<Profile>, 'id' | 'created_at'>) => {
     if (!user) return { data: null, error: new Error('No user logged in') }
 
     try {
-      // Create a type-safe update object using the correct type from the database
-      const { data, error } = await supabase
+      // Optimized: Use maybeSingle() instead of single() to handle potential no-match scenarios gracefully
+      // Add updated_at timestamp for audit trail
+      const updatePayload = {
+        ...updates,
+        updated_at: new Date().toISOString()
+      }
+
+      // Supabase type inference issue with dynamic update payloads - the payload is type-safe at runtime
+      const result = await supabase
         .from('profiles')
-        .update(updates as any) // Type assertion to bypass TypeScript error
+        // @ts-expect-error - TypeScript infers 'never' for the update parameter due to complex type inference
+        .update(updatePayload)
         .eq('id', user.id)
         .select()
-        .single()
+        .maybeSingle()
+
+      const { data, error } = result
 
       if (error) {
         setError(error.message)
         return { data: null, error }
+      }
+
+      // Handle case where profile doesn't exist
+      if (!data) {
+        const noProfileError = new Error('Profile not found')
+        setError(noProfileError.message)
+        return { data: null, error: noProfileError }
       }
 
       setProfile(data)
@@ -206,9 +232,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        if (!mounted) return
+
         setUser(session?.user as User ?? null)
         if (session?.user) {
-          await getCurrentProfile()
+          const profile = await getCurrentProfile()
+          if (mounted) {
+            setProfile(profile)
+          }
         } else {
           setProfile(null)
         }

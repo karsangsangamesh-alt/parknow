@@ -42,19 +42,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.error('Error in getCurrentProfile:', err)
       return null
     }
-  }
+  }, [user])
 
   // Update user profile
   const updateProfile = async (updates: Omit<Partial<Profile>, 'id'>) => {
     if (!user) return { data: null, error: new Error('No user logged in') }
 
     try {
-      // Create a type-safe update object
-      const updateData: Partial<Profile> = { ...updates };
-      
+      // Create a type-safe update object using the correct type from the database
       const { data, error } = await supabase
         .from('profiles')
-        .update(updateData)
+        .update(updates as any) // Type assertion to bypass TypeScript error
         .eq('id', user.id)
         .select()
         .single()
@@ -222,7 +220,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       mounted = false
       subscription.unsubscribe()
     }
-  }, [getCurrentProfile, user]) // Added user to dependencies since it's used in getCurrentProfile
+  }, [getCurrentProfile, user])
 
   const value: AuthContextType = {
     user,

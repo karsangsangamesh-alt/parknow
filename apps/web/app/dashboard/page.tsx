@@ -358,7 +358,11 @@ export default function DashboardPage() {
                     Member Since
                   </label>
                   <p className="mt-1 text-sm text-gray-900">
-                    {new Date(user?.created_at || '').toLocaleDateString()}
+                    {(user as any)?.created_at
+                      ? new Date((user as any).created_at).toLocaleDateString()
+                      : profile?.created_at
+                      ? new Date(profile.created_at).toLocaleDateString()
+                      : 'N/A'}
                   </p>
                 </div>
               </div>

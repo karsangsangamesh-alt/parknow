@@ -1,8 +1,8 @@
 'use client'
 
 import React, { useState } from 'react'
-import { useAuth } from '../../lib/supabase/auth-context'
-import { useRole } from '../../lib/supabase/auth-context'
+import { useAuth } from './apps/web/lib/supabase/auth-context'
+import { useRole } from './apps/web/lib/supabase/auth-context'
 import { useRouter } from 'next/navigation'
 
 export function UserDashboard() {
@@ -358,7 +358,7 @@ export function UserDashboard() {
                     Member Since
                   </label>
                   <p className="mt-1 text-sm text-gray-900">
-                    {new Date(user?.created_at || '').toLocaleDateString()}
+                    {profile?.created_at ? new Date(profile.created_at).toLocaleDateString() : 'N/A'}
                   </p>
                 </div>
               </div>

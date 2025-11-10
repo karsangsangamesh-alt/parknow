@@ -1,15 +1,15 @@
 'use client'
 
-import React, { createContext, useContext, useEffect, useState } from 'react'
-import { User, Session } from '@supabase/supabase-js'
-import { supabase, Profile, AuthState } from './client'
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react'
+import { Session } from '@supabase/supabase-js'
+import { supabase, Profile, AuthState, User } from './client'
 
 interface AuthContextType extends AuthState {
   signIn: (email: string, password: string) => Promise<{ data: any; error: any }>
   signUp: (email: string, password: string, fullName: string) => Promise<{ data: any; error: any }>
   signOut: () => Promise<{ error: any }>
   resetPassword: (email: string) => Promise<{ data: any; error: any }>
-  updateProfile: (updates: Partial<Profile>) => Promise<{ data: Profile | null; error: any }>
+  updateProfile: (updates: Omit<Partial<Profile>, 'id'>) => Promise<{ data: Profile | null; error: any }>
   getCurrentProfile: () => Promise<Profile | null>
 }
 
@@ -22,7 +22,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState<string | null>(null)
 
   // Get user profile data
-  const getCurrentProfile = async (): Promise<Profile | null> => {
+  const getCurrentProfile = useCallback(async (): Promise<Profile | null> => {
     if (!user) return null
 
     try {
@@ -45,13 +45,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   // Update user profile
-  const updateProfile = async (updates: Partial<Profile>) => {
+  const updateProfile = async (updates: Omit<Partial<Profile>, 'id'>) => {
     if (!user) return { data: null, error: new Error('No user logged in') }
 
     try {
+      // Create a type-safe update object
+      const updateData: Partial<Profile> = { ...updates };
+      
       const { data, error } = await supabase
         .from('profiles')
-        .update(updates)
+        .update(updateData)
         .eq('id', user.id)
         .select()
         .single()
@@ -182,46 +185,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let mounted = true
 
     // Get initial session
-    supabase.auth.getSession().then(({ data: { session }, error }) => {
-      if (error) {
-        console.error('Error getting session:', error)
+    const initializeAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!mounted) return
+
+      if (session?.user) {
+        setUser(session.user as User)
+        const profile = await getCurrentProfile()
         if (mounted) {
-          setError(error.message)
+          setProfile(profile)
           setLoading(false)
         }
-        return
-      }
-
-      if (mounted) {
-        setUser(session?.user ?? null)
+      } else {
+        setUser(null)
+        setProfile(null)
         setLoading(false)
       }
-    })
+    }
+
+    initializeAuth()
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        if (!mounted) return
-
-        setUser(session?.user ?? null)
-
+        setUser(session?.user as User ?? null)
         if (session?.user) {
-          // Load user profile when user signs in
-          const profileData = await getCurrentProfile()
-          setProfile(profileData)
+          await getCurrentProfile()
         } else {
           setProfile(null)
         }
-
-        setLoading(false)
       }
     )
 
+    // Cleanup subscription on unmount
     return () => {
       mounted = false
       subscription.unsubscribe()
     }
-  }, [])
+  }, [getCurrentProfile, user]) // Added user to dependencies since it's used in getCurrentProfile
 
   const value: AuthContextType = {
     user,

@@ -5,7 +5,7 @@ import { useAuth } from '../../lib/supabase/auth-context'
 import { useRole } from '../../lib/supabase/auth-context'
 import { useRouter } from 'next/navigation'
 
-export default function DashboardPage() {
+export function UserDashboard() {
   const { user, profile, signOut } = useAuth()
   const { isHost, isRenter, role } = useRole()
   const router = useRouter()
@@ -369,3 +369,5 @@ export default function DashboardPage() {
     </div>
   )
 }
+
+export default UserDashboard

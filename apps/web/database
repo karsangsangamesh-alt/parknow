@@ -1,0 +1,36 @@
+-- Function to handle new user profile creation
+CREATE OR REPLACE FUNCTION handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.profiles (id, email, full_name, role, is_verified)
+  VALUES (
+    NEW.id,
+    NEW.email,
+    COALESCE(NEW.raw_user_meta_data->>'full_name', 'User'),
+    COALESCE(NEW.raw_user_meta_data->>'role', 'renter'),
+    false
+  );
+  
+  -- Also create notification preferences
+  INSERT INTO public.notification_preferences (user_id, email_bookings, email_payments, email_reviews, email_marketing, push_bookings, push_payments, push_reviews, push_marketing)
+  VALUES (
+    NEW.id,
+    true, -- email_bookings
+    true, -- email_payments
+    true, -- email_reviews
+    false, -- email_marketing (opt-in)
+    true, -- push_bookings
+    true, -- push_payments
+    true, -- push_reviews
+    false -- push_marketing (opt-in)
+  );
+  
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Create trigger to automatically create profile on user signup
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE PROCEDURE handle_new_user();

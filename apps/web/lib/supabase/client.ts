@@ -16,6 +16,9 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   }
 })
 
+// Re-export Database type for use in other files
+export type { Database } from '../../types/database'
+
 // Database types for TypeScript
 export type Tables<T extends keyof Database['public']['Tables']> = 
   Database['public']['Tables'][T]['Row']
